@@ -92,3 +92,7 @@ li {
 .selected {
 	border: 3px solid white;
 }
+
+.toggle-history {
+	margin-top: 20px;
+}

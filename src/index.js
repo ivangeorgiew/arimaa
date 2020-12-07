@@ -33,11 +33,7 @@ const Game = () => {
     [`5 ${SILVER}`]: camelS,
     [`6 ${SILVER}`]: elephantS
   }
-
-  const [selected, setSelected] = useState([])
-  const [currentMove, setCurrentMove] = useState(0)
-  const [partOfMove, setPartOfMove] = useState(0)
-  const [history, setHistory] = useState([[{
+  const DEFAULT_HISTORY = [[{
     playerOnTurn: GOLD,
     hasWinner: false,
     board: [...Array(8).keys()].map(idx => {
@@ -54,69 +50,101 @@ const Game = () => {
           return [...Array(8).keys()].map(() => [null])
       }
     })
-  }]])
+  }]]
+
+  const [isHistoryEnabled, setIsHistoryEnabled] = useState(false)
+  const [selectedPosition, setSelectedPosition] = useState([])
+  const [currentMove, setCurrentMove] = useState(0)
+  const [partOfMove, setPartOfMove] = useState(0)
+  const [history, setHistory] = useState(DEFAULT_HISTORY)
 
   const { playerOnTurn, hasWinner, board } = history[currentMove][partOfMove]
 
-  const isFrozen = () => {
-    const otherPlayer = playerOnTurn === GOLD ? SILVER : GOLD
-    //top, bottom, left, right
-    const neighbours = [
-      selected[0] > 0 ?
-        board[selected[0] - 1][selected[1]] :
+  const getNeighbours = ([rowIdx, colIdx], nextBoard) => {
+    return [
+      rowIdx > 0 ?
+        [[rowIdx - 1, colIdx], nextBoard[rowIdx - 1][colIdx], 'top'] :
         undefined,
-      selected[0] < 7 ?
-        board[selected[0] + 1][selected[1]] :
+      rowIdx < 7 ?
+        [[rowIdx + 1, colIdx], nextBoard[rowIdx + 1][colIdx], 'bottom'] :
         undefined,
-      selected[1] > 0 ?
-        board[selected[0]][selected[1] - 1] :
+      colIdx > 0 ?
+        [[rowIdx, colIdx - 1], nextBoard[rowIdx][colIdx - 1], 'left'] :
         undefined,
-      selected[1] < 7 ?
-        board[selected[0]][selected[1] + 1] :
+      colIdx < 7 ?
+        [[rowIdx, colIdx + 1], nextBoard[rowIdx][colIdx + 1], 'right'] :
         undefined
     ].filter(el => el !== undefined)
-    const figure = board[selected[0]][selected[1]]
+  }
+
+  const isFrozen = () => {
+    const otherPlayer = playerOnTurn === GOLD ? SILVER : GOLD
+    const [selRow, selCol] = selectedPosition
+    const [selPower] = board[selRow][selCol]
+    const neighbours = getNeighbours([selRow, selCol], board)
+      .map(neighbour => neighbour[1])
 
     return (
-      neighbours.some(neighbour => neighbour[0] > figure[0] && neighbour[1] === otherPlayer) &&
-      neighbours.every(neighbour => neighbour[1] !== playerOnTurn)
+      neighbours.every(([_, neighOwner]) => neighOwner !== playerOnTurn) &&
+      neighbours.some(([neighPower, neighOwner]) =>
+        neighPower > selPower && neighOwner === otherPlayer
+      )
     )
   }
 
-  const isValidEmptyCell = ({ rowIdx, cellIdx }) => {
-    // top, bottom, left, right
-    const neighbourPositions = [
-      selected[0] > 0 ?
-        [selected[0] - 1, selected[1]] :
-        undefined,
-      // rabbits can't go down
-      selected[0] < 7 && board[selected[0]][selected[1]][0] > 1 ?
-        [selected[0] + 1, selected[1]] :
-        undefined,
-      selected[1] > 0 ?
-        [selected[0], selected[1] - 1] :
-        undefined,
-      selected[1] < 7 ?
-        [selected[0], selected[1] + 1] :
-        undefined
-    ].filter(el => el !== undefined)
+  const isValidEmptyCell = ([rowIdx, cellIdx]) => {
+    const [selRow, selCol] = selectedPosition
+    const [selPower, selOwner] = board[selRow][selCol]
+    const neighbourPositions = getNeighbours([selRow, selCol], board)
+      .filter(neighbour => (
+        !(neighbour[2] === 'top' && selPower === 1 && selOwner === SILVER) &&
+        !(neighbour[2] === 'bottom' && selPower === 1 && selOwner === GOLD)
+      ))
+      .map(neighbour => neighbour[0])
 
-    return neighbourPositions.filter(cell => board[cell[0]][cell[1]][0] === null)
-      .some(cellPos => cellPos[0] === rowIdx && cellPos[1] === cellIdx)
+    return neighbourPositions.some(([neighRow, neighCol]) =>
+      neighRow === rowIdx &&
+      neighCol === cellIdx &&
+      board[neighRow][neighCol][0] === null
+    )
+  }
+
+  const removeFiguresOnBoard = nextBoard => {
+    // position and owner
+    const traps = [
+      [[2, 2], nextBoard[2][2][1]],
+      [[2, 5], nextBoard[2][5][1]],
+      [[5, 2], nextBoard[5][2][1]],
+      [[5, 5], nextBoard[5][5][1]]
+    ]
+
+    traps.forEach(([[rowIdx, colIdx], trapOwner]) => {
+      if (trapOwner === undefined) {
+        return false
+      }
+
+      const neighbourOwners = getNeighbours([rowIdx, colIdx], nextBoard)
+        .map(neighbour => neighbour[1][1])
+
+      if (neighbourOwners.every(neighOwner => neighOwner !== trapOwner)) {
+        nextBoard[rowIdx][colIdx] = [null]
+      }
+    })
   }
 
   const calcIfHasWinner = () => {
-    //TODO
+    //TODO: check if remaining rabbits
+    //TODO: check if has available turns
+    //TODO: check if a rabbit has reached the end
     return false
   }
 
-  const handleCellClick = ({ rowIdx, cellIdx }) => () => {
+  const handleCellClick = ([rowIdx, cellIdx]) => () => {
     // Clicking on player's figure
-    const clickedCell = board[rowIdx][cellIdx]
+    const [power, owner] = board[rowIdx][cellIdx]
 
-    if (clickedCell[0] !== null && clickedCell[1] === playerOnTurn) {
-      setSelected([rowIdx, cellIdx])
-
+    if (power !== null && owner === playerOnTurn) {
+      setSelectedPosition([rowIdx, cellIdx])
       return
     }
 
@@ -124,11 +152,16 @@ const Game = () => {
     const nextHistory = history.map(moves => moves.map(move => Object.assign({}, move)))
     const nextBoard = board.map(row => [...row])
 
-    if (selected.length === 2 && partOfMove < 4 && !isFrozen()) {
+    if (selectedPosition.length === 2 && partOfMove < 4 && !isFrozen()) {
       // Simple move on empty valid cell
-      if (isValidEmptyCell({ rowIdx, cellIdx })) {
-        nextBoard[rowIdx][cellIdx] = nextBoard[selected[0]][selected[1]]
-        nextBoard[selected[0]][selected[1]] = [null]
+      if (isValidEmptyCell([rowIdx, cellIdx])) {
+        const [selRow, selCol] = selectedPosition
+
+        nextBoard[rowIdx][cellIdx] = nextBoard[selRow][selCol]
+        nextBoard[selRow][selCol] = [null]
+
+        // Remove figures in traps
+        removeFiguresOnBoard(nextBoard)
 
         nextHistory[currentMove] = nextHistory[currentMove]
           .slice(0, partOfMove + 1)
@@ -138,13 +171,16 @@ const Game = () => {
             board: nextBoard
           })
 
+        if (nextBoard[rowIdx][cellIdx][0] === null) {
+          setSelectedPosition([])
+        } else {
+          setSelectedPosition([rowIdx, cellIdx])
+        }
+
         setPartOfMove(partOfMove + 1)
-        setSelected([rowIdx, cellIdx])
         setHistory(nextHistory)
       }
 
-      //TODO: remove if in trap
-      //TODO: prevent moving to the starting position
       //TODO: implement pull, push
       // Pull a figure
       // Push a figure
@@ -157,7 +193,7 @@ const Game = () => {
 
     setCurrentMove(currentMove + 1)
     setPartOfMove(0)
-    setSelected([])
+    setSelectedPosition([])
     setHistory(nextHistory.slice(0, currentMove + 1).concat([[{
       playerOnTurn: nextPlayerOnTurn,
       hasWinner,
@@ -165,15 +201,26 @@ const Game = () => {
     }]]))
   }
 
+  const toggleHistory = () => {
+    setIsHistoryEnabled(!isHistoryEnabled)
+  }
+
   const changeToMove = wantedMove => () => {
     setCurrentMove(wantedMove)
     setPartOfMove(history[wantedMove].length - 1)
-    setSelected([])
+    setSelectedPosition([])
   }
 
   const changeToPartOfMove = wantedPartOfMove => () => {
     setPartOfMove(wantedPartOfMove)
-    setSelected([])
+    setSelectedPosition([])
+  }
+
+  const startNewGame = () => {
+    setSelectedPosition([])
+    setCurrentMove(0)
+    setPartOfMove(0)
+    setHistory(DEFAULT_HISTORY)
   }
 
   //TODO: implement deciding board placement
@@ -205,7 +252,7 @@ const Game = () => {
               classes = classes + ' trap'
             }
 
-            if (rowIdx === selected[0] && cellIdx === selected[1]) {
+            if (rowIdx === selectedPosition[0] && cellIdx === selectedPosition[1]) {
               classes = classes + ' selected'
             }
 
@@ -213,7 +260,7 @@ const Game = () => {
               <button
                 className={classes}
                 key={cellIdx}
-                onClick={handleCellClick({ rowIdx, cellIdx })}
+                onClick={handleCellClick([rowIdx, cellIdx])}
               >
                 {
                   cell[0] !== null ?
@@ -234,34 +281,44 @@ const Game = () => {
   )
 
   const HistoryOfMoves = () => (
-    <ul>
-      {history.map((move, wantedMove) => {
-        const nameOfPlayer = move[0]['playerOnTurn']
-          .replace(/^./, m => m.toUpperCase())
+    <div className="current-moves">
+      <h3>Change to part of your move</h3>
+      {history[currentMove].map((_, wantedPartOfMove) => (
+        <button 
+          key={wantedPartOfMove} 
+          onClick={changeToPartOfMove(wantedPartOfMove)}
+        >
+          {`Go to move: ${wantedPartOfMove}`}
+        </button>
+      ))}
+    </div>
+  )
 
-        return (
-          <li key={wantedMove}>
-            <button onClick={changeToMove(wantedMove)}>
-              {`${nameOfPlayer} move: ${wantedMove + 1}`}
-            </button>
-            {
-              wantedMove !== currentMove ?
-                null :
-                <div className="current-moves">
-                  {move.map((_, wantedPartOfMove) => (
-                    <button 
-                      key={wantedPartOfMove} 
-                      onClick={changeToPartOfMove(wantedPartOfMove)}
-                    >
-                      {`Go to move: ${wantedPartOfMove}`}
-                    </button>
-                  ))}
-                </div>
-            }
-          </li>
-        )
-      })}
-    </ul>
+  const Options = () => (
+    <div className='options'>
+      <button onClick={startNewGame}>New Game</button>
+      <button className='toggle-history' onClick={toggleHistory}>
+        { isHistoryEnabled ? 'Hide history' : 'Show history' }
+      </button>
+      { 
+        !isHistoryEnabled ?
+          null :
+          <ul>
+            {history.map((move, wantedMove) => {
+              const nameOfPlayer = move[0]['playerOnTurn']
+                .replace(/^./, m => m.toUpperCase())
+
+              return (
+                <li key={wantedMove}>
+                  <button onClick={changeToMove(wantedMove)}>
+                    {`${nameOfPlayer} move: ${wantedMove + 1}`}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+      }
+    </div>
   )
 
   return (
@@ -272,6 +329,7 @@ const Game = () => {
       </div>
       <div className="game-info">
         <HistoryOfMoves />
+        <Options />
       </div>
     </div>
   )

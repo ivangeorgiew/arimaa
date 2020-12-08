@@ -11,10 +11,6 @@ li {
   margin-bottom: 10px;
 }
 
-.playfield {
-  width: 750px;
-}
-
 .row:after {
   clear: both;
   content: "";
@@ -22,9 +18,10 @@ li {
 }
 
 .board-info {
-	display: flex;
-	width: 750px;
-	align-items: center;
+  display: flex;
+  justify-content: center;
+  /*align-items: center;*/
+  /*width: 750px;*/
 }
 
 .status {
@@ -41,7 +38,7 @@ li {
 
 .board {
   width: 672px;
-  height: 672px;
+  height: 671.5px;
   border: 5px solid black;
   margin: 0 auto;
 }
@@ -89,8 +86,12 @@ li {
 	background-size: 80px;
 }
 
-.selected {
+.own-selected {
 	border: 3px solid white;
+}
+
+.enemy-selected {
+	border: 3px dotted white;
 }
 
 .toggle-history {

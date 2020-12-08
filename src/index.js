@@ -35,6 +35,7 @@ const Game = () => {
   }
   const DEFAULT_HISTORY = [[{
     playerOnTurn: GOLD,
+    movesLeft: 4,
     hasWinner: false,
     board: [...Array(8).keys()].map(idx => {
       switch (idx) {
@@ -53,69 +54,79 @@ const Game = () => {
   }]]
 
   const [isHistoryEnabled, setIsHistoryEnabled] = useState(false)
-  const [selectedPosition, setSelectedPosition] = useState([])
+  const [selectedPositions, setSelectedPositions] = useState([[], []])
   const [currentMove, setCurrentMove] = useState(0)
   const [partOfMove, setPartOfMove] = useState(0)
   const [history, setHistory] = useState(DEFAULT_HISTORY)
 
-  const { playerOnTurn, hasWinner, board } = history[currentMove][partOfMove]
+  const { playerOnTurn, movesLeft, hasWinner, board } = history[currentMove][partOfMove]
+  const [[ownSelRow, ownSelCol], [enemySelRow, enemySelCol]] = selectedPositions
+  const enemy = playerOnTurn === GOLD ? SILVER : GOLD
 
-  const getNeighbours = ([rowIdx, colIdx], nextBoard) => {
+  const getNeighbours = ({ rowIdx, colIdx, board }) => {
     return [
       rowIdx > 0 ?
-        [[rowIdx - 1, colIdx], nextBoard[rowIdx - 1][colIdx], 'top'] :
+        [[rowIdx - 1, colIdx], board[rowIdx - 1][colIdx], 'top'] :
         undefined,
       rowIdx < 7 ?
-        [[rowIdx + 1, colIdx], nextBoard[rowIdx + 1][colIdx], 'bottom'] :
+        [[rowIdx + 1, colIdx], board[rowIdx + 1][colIdx], 'bottom'] :
         undefined,
       colIdx > 0 ?
-        [[rowIdx, colIdx - 1], nextBoard[rowIdx][colIdx - 1], 'left'] :
+        [[rowIdx, colIdx - 1], board[rowIdx][colIdx - 1], 'left'] :
         undefined,
       colIdx < 7 ?
-        [[rowIdx, colIdx + 1], nextBoard[rowIdx][colIdx + 1], 'right'] :
+        [[rowIdx, colIdx + 1], board[rowIdx][colIdx + 1], 'right'] :
         undefined
     ].filter(el => el !== undefined)
   }
 
-  const isFrozen = () => {
-    const otherPlayer = playerOnTurn === GOLD ? SILVER : GOLD
-    const [selRow, selCol] = selectedPosition
-    const [selPower] = board[selRow][selCol]
-    const neighbours = getNeighbours([selRow, selCol], board)
-      .map(neighbour => neighbour[1])
-
-    return (
-      neighbours.every(([_, neighOwner]) => neighOwner !== playerOnTurn) &&
-      neighbours.some(([neighPower, neighOwner]) =>
-        neighPower > selPower && neighOwner === otherPlayer
-      )
+  const getIsFrozen = ({ neighbours, ownSelFigure }) => (
+    neighbours.every(([_pos, [_fig, neighOwner]]) => neighOwner !== playerOnTurn) &&
+    neighbours.some(([_pos, [neighFigure, neighOwner]]) =>
+      neighFigure > ownSelFigure && neighOwner === enemy
     )
-  }
+  )
 
-  const isValidEmptyCell = ([rowIdx, cellIdx]) => {
-    const [selRow, selCol] = selectedPosition
-    const [selPower, selOwner] = board[selRow][selCol]
-    const neighbourPositions = getNeighbours([selRow, selCol], board)
-      .filter(neighbour => (
-        !(neighbour[2] === 'top' && selPower === 1 && selOwner === SILVER) &&
-        !(neighbour[2] === 'bottom' && selPower === 1 && selOwner === GOLD)
+  const getIsValidCellClick = ({
+    neighbours,
+    rowIdx,
+    colIdx,
+    ownSelFigure,
+    ownSelOwner,
+    clickedCellFigure
+  }) => {
+    // rabbit is clicked, which can't go back
+    if (clickedCellFigure === null && ownSelFigure === 1) {
+      neighbours = neighbours.filter(neighbour => (
+        !(neighbour[2] === 'top' && ownSelFigure === 1 && ownSelOwner === SILVER) &&
+        !(neighbour[2] === 'bottom' && ownSelFigure === 1 && ownSelOwner === GOLD)
       ))
-      .map(neighbour => neighbour[0])
+    // enemy figure is clicked, so add its neighbour cells
+    } else if (typeof enemySelRow === 'number' && typeof enemySelCol === 'number') {
+      neighbours = neighbours.concat(getNeighbours({
+        rowIdx: enemySelRow,
+        colIdx: enemySelCol,
+        board
+      }))
+    }
 
-    return neighbourPositions.some(([neighRow, neighCol]) =>
+    return neighbours.some(([[neighRow, neighCol], [neighFigure, neighOwner]]) => (
       neighRow === rowIdx &&
-      neighCol === cellIdx &&
-      board[neighRow][neighCol][0] === null
-    )
+      neighCol === colIdx &&
+      (
+        neighFigure === null ||
+        (neighOwner === enemy && neighFigure < ownSelFigure && movesLeft > 1)
+      )
+    ))
   }
 
-  const removeFiguresOnBoard = nextBoard => {
+  const removeFiguresInTraps = ({ board, rowIdx, colIdx }) => {
     // position and owner
     const traps = [
-      [[2, 2], nextBoard[2][2][1]],
-      [[2, 5], nextBoard[2][5][1]],
-      [[5, 2], nextBoard[5][2][1]],
-      [[5, 5], nextBoard[5][5][1]]
+      [[2, 2], board[2][2][1]],
+      [[2, 5], board[2][5][1]],
+      [[5, 2], board[5][2][1]],
+      [[5, 5], board[5][5][1]]
     ]
 
     traps.forEach(([[rowIdx, colIdx], trapOwner]) => {
@@ -123,13 +134,18 @@ const Game = () => {
         return false
       }
 
-      const neighbourOwners = getNeighbours([rowIdx, colIdx], nextBoard)
+      const neighbourOwners = getNeighbours({ rowIdx, colIdx, board })
         .map(neighbour => neighbour[1][1])
 
       if (neighbourOwners.every(neighOwner => neighOwner !== trapOwner)) {
-        nextBoard[rowIdx][colIdx] = [null]
+        board[rowIdx][colIdx] = [null]
       }
     })
+
+    // remove selection if selected figure got removed from trap
+    if (board[rowIdx][colIdx][0] === null) {
+      setSelectedPositions([[], []])
+    }
   }
 
   const calcIfHasWinner = () => {
@@ -139,52 +155,86 @@ const Game = () => {
     return false
   }
 
-  const handleCellClick = ([rowIdx, cellIdx]) => () => {
-    // Clicking on player's figure
-    const [power, owner] = board[rowIdx][cellIdx]
+  const handleCellClick = ({ rowIdx, colIdx }) => () => {
+    const [clickedCellFigure, clickedCellOwner] = board[rowIdx][colIdx]
 
-    if (power !== null && owner === playerOnTurn) {
-      setSelectedPosition([rowIdx, cellIdx])
+    // Clicking on own figure
+    if (clickedCellFigure !== null && clickedCellOwner === playerOnTurn) {
+      setSelectedPositions([[rowIdx, colIdx], []])
       return
     }
 
-    // Moving the selected figure
-    const nextHistory = history.map(moves => moves.map(move => Object.assign({}, move)))
-    const nextBoard = board.map(row => [...row])
+    // Moving the selected figures
+    if (typeof ownSelRow === 'number' && typeof ownSelCol === 'number') {
+      const nextHistory = history.map(moves => moves.map(move => Object.assign({}, move)))
+      const nextBoard = board.map(row => [...row])
 
-    if (selectedPosition.length === 2 && partOfMove < 4 && !isFrozen()) {
-      // Simple move on empty valid cell
-      if (isValidEmptyCell([rowIdx, cellIdx])) {
-        const [selRow, selCol] = selectedPosition
+      const [ownSelFigure, ownSelOwner] = board[ownSelRow][ownSelCol]
+      const ownSelNeighbours = getNeighbours({ rowIdx: ownSelRow, colIdx: ownSelCol, board })
+      const enemySelNeighbours = getNeighbours({ rowIdx: enemySelRow, colIdx: enemySelCol, board })
 
-        nextBoard[rowIdx][cellIdx] = nextBoard[selRow][selCol]
-        nextBoard[selRow][selCol] = [null]
+      const isFrozen = getIsFrozen({ neighbours: ownSelNeighbours, ownSelFigure })
+      const isValidCellClick = getIsValidCellClick({
+        neighbours: ownSelNeighbours.concat(enemySelNeighbours),
+        rowIdx,
+        colIdx,
+        ownSelFigure,
+        ownSelOwner,
+        clickedCellFigure
+      })
 
-        // Remove figures in traps
-        removeFiguresOnBoard(nextBoard)
+      if (movesLeft > 0 && !isFrozen && isValidCellClick) {
+        if (clickedCellOwner === enemy) {
+          setSelectedPositions([[ownSelRow, ownSelCol], [rowIdx, colIdx]])
+          return
+        }
+
+        const isPushOrPull = typeof enemySelRow === 'number' &&
+          typeof enemySelCol === 'number'
+
+        // enemy figure is selected and trying to push or pull
+        if (isPushOrPull) {
+          // pull
+          if (ownSelNeighbours.some(
+            ([[neighRow, neighCol]]) => neighRow === rowIdx && neighCol === colIdx)
+          ) {
+            nextBoard[rowIdx][colIdx] = board[ownSelRow][ownSelCol]
+            nextBoard[ownSelRow][ownSelCol] = board[enemySelRow][enemySelCol]
+            nextBoard[enemySelRow][enemySelCol] = [null]
+
+            setSelectedPositions([[rowIdx, colIdx], []])
+          // push
+          } else {
+            nextBoard[rowIdx][colIdx] = board[enemySelRow][enemySelCol]
+            nextBoard[enemySelRow][enemySelCol] = board[ownSelRow][ownSelCol]
+            nextBoard[ownSelRow][ownSelCol] = [null]
+
+            setSelectedPositions([[enemySelRow, enemySelCol], []])
+          }
+        // moving own figure to empty cell
+        } else {
+          nextBoard[rowIdx][colIdx] = board[ownSelRow][ownSelCol]
+          nextBoard[ownSelRow][ownSelCol] = [null]
+
+          setSelectedPositions([[rowIdx, colIdx], []])
+        }
+
+        removeFiguresInTraps({ board: nextBoard, rowIdx, colIdx })
 
         nextHistory[currentMove] = nextHistory[currentMove]
           .slice(0, partOfMove + 1)
           .concat({
             playerOnTurn,
+            movesLeft: isPushOrPull ? movesLeft - 2 : movesLeft - 1,
             hasWinner: calcIfHasWinner(),
             board: nextBoard
           })
 
-        if (nextBoard[rowIdx][cellIdx][0] === null) {
-          setSelectedPosition([])
-        } else {
-          setSelectedPosition([rowIdx, cellIdx])
-        }
-
         setPartOfMove(partOfMove + 1)
         setHistory(nextHistory)
       }
-
-      //TODO: implement pull, push
-      // Pull a figure
-      // Push a figure
     }
+
   }
 
   const handleEndTurnClick = () => {
@@ -193,9 +243,10 @@ const Game = () => {
 
     setCurrentMove(currentMove + 1)
     setPartOfMove(0)
-    setSelectedPosition([])
+    setSelectedPositions([[], []])
     setHistory(nextHistory.slice(0, currentMove + 1).concat([[{
       playerOnTurn: nextPlayerOnTurn,
+      movesLeft: 4,
       hasWinner,
       board
     }]]))
@@ -208,16 +259,16 @@ const Game = () => {
   const changeToMove = wantedMove => () => {
     setCurrentMove(wantedMove)
     setPartOfMove(history[wantedMove].length - 1)
-    setSelectedPosition([])
+    setSelectedPositions([[], []])
   }
 
   const changeToPartOfMove = wantedPartOfMove => () => {
     setPartOfMove(wantedPartOfMove)
-    setSelectedPosition([])
+    setSelectedPositions([[], []])
   }
 
   const startNewGame = () => {
-    setSelectedPosition([])
+    setSelectedPositions([[], []])
     setCurrentMove(0)
     setPartOfMove(0)
     setHistory(DEFAULT_HISTORY)
@@ -226,11 +277,11 @@ const Game = () => {
   //TODO: implement deciding board placement
   const BoardInfo = () => (
     <div className='board-info'>
-      <div className='status'>{`Moves left for ${playerOnTurn}: ${4 - partOfMove}`}</div>
+      <div className='status'>{`Moves left for ${playerOnTurn}: ${movesLeft}`}</div>
       <button
         className='end-turn'
         onClick={handleEndTurnClick}
-        disabled={partOfMove === 0}
+        disabled={movesLeft === 4}
       >
         End Turn
       </button>
@@ -241,26 +292,30 @@ const Game = () => {
     <div className='board'>
       {board.map((row, rowIdx)=> (
         <div className='row' key={rowIdx}>
-          {row.map((cell, cellIdx) => {
+          {row.map((cell, colIdx) => {
             let classes = 'cell'
 
             if (typeof cell[1] === 'string') {
               classes = classes + ` ${cell[1]}`
             }
 
-            if ([2, 5].includes(rowIdx) && [2, 5].includes(cellIdx)) {
+            if ([2, 5].includes(rowIdx) && [2, 5].includes(colIdx)) {
               classes = classes + ' trap'
             }
 
-            if (rowIdx === selectedPosition[0] && cellIdx === selectedPosition[1]) {
-              classes = classes + ' selected'
+            if (rowIdx === ownSelRow && colIdx === ownSelCol) {
+              classes = classes + ' own-selected'
+            }
+
+            if (rowIdx === enemySelRow && colIdx === enemySelCol) {
+              classes = classes + ' enemy-selected'
             }
 
             return (
               <button
                 className={classes}
-                key={cellIdx}
-                onClick={handleCellClick([rowIdx, cellIdx])}
+                key={colIdx}
+                onClick={handleCellClick({ rowIdx, colIdx })}
               >
                 {
                   cell[0] !== null ?

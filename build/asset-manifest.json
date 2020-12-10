@@ -1,15 +1,15 @@
 {
   "files": {
-    "main.css": "/arimaa/static/css/main.0fb19910.chunk.css",
-    "main.js": "/arimaa/static/js/main.926c7b1f.chunk.js",
-    "main.js.map": "/arimaa/static/js/main.926c7b1f.chunk.js.map",
+    "main.css": "/arimaa/static/css/main.3b49109c.chunk.css",
+    "main.js": "/arimaa/static/js/main.94378aea.chunk.js",
+    "main.js.map": "/arimaa/static/js/main.94378aea.chunk.js.map",
     "runtime-main.js": "/arimaa/static/js/runtime-main.2b16f225.js",
     "runtime-main.js.map": "/arimaa/static/js/runtime-main.2b16f225.js.map",
-    "static/js/2.71e9d0e7.chunk.js": "/arimaa/static/js/2.71e9d0e7.chunk.js",
-    "static/js/2.71e9d0e7.chunk.js.map": "/arimaa/static/js/2.71e9d0e7.chunk.js.map",
+    "static/js/2.3a370577.chunk.js": "/arimaa/static/js/2.3a370577.chunk.js",
+    "static/js/2.3a370577.chunk.js.map": "/arimaa/static/js/2.3a370577.chunk.js.map",
     "index.html": "/arimaa/index.html",
-    "static/css/main.0fb19910.chunk.css.map": "/arimaa/static/css/main.0fb19910.chunk.css.map",
-    "static/js/2.71e9d0e7.chunk.js.LICENSE.txt": "/arimaa/static/js/2.71e9d0e7.chunk.js.LICENSE.txt",
+    "static/css/main.3b49109c.chunk.css.map": "/arimaa/static/css/main.3b49109c.chunk.css.map",
+    "static/js/2.3a370577.chunk.js.LICENSE.txt": "/arimaa/static/js/2.3a370577.chunk.js.LICENSE.txt",
     "static/media/camel-g.4f28b9c5.png": "/arimaa/static/media/camel-g.4f28b9c5.png",
     "static/media/camel-s.214e0078.png": "/arimaa/static/media/camel-s.214e0078.png",
     "static/media/cat-g.a895ead5.png": "/arimaa/static/media/cat-g.a895ead5.png",
@@ -26,8 +26,8 @@
   },
   "entrypoints": [
     "static/js/runtime-main.2b16f225.js",
-    "static/js/2.71e9d0e7.chunk.js",
-    "static/css/main.0fb19910.chunk.css",
-    "static/js/main.926c7b1f.chunk.js"
+    "static/js/2.3a370577.chunk.js",
+    "static/css/main.3b49109c.chunk.css",
+    "static/js/main.94378aea.chunk.js"
   ]
 }

@@ -53,7 +53,7 @@ const Game = () => {
     })
   }]]
 
-  const [isHistoryEnabled, setIsHistoryEnabled] = useState(false)
+  const [isHistoryEnabled, setIsHistoryEnabled] = useState(true)
   const [selectedPositions, setSelectedPositions] = useState([[], []])
   const [currentTurn, setCurrentTurn] = useState(0)
   const [currentMove, setCurrentMove] = useState(0)
@@ -64,6 +64,7 @@ const Game = () => {
   const enemy = playerOnTurn === GOLD ? SILVER : GOLD
 
   const getNeighbours = ({ rowIdx, colIdx, board }) => {
+    // [[rowIdx, colIdx], [figure, owner], 'position']
     return [
       rowIdx > 0 ?
         [[rowIdx - 1, colIdx], board[rowIdx - 1][colIdx], 'top'] :
@@ -87,36 +88,22 @@ const Game = () => {
     )
   )
 
-  const getIsValidCellClick = ({
+  const getValidClicks = ({
     neighbours,
-    rowIdx,
-    colIdx,
     ownSelFigure,
-    ownSelOwner,
-    clickedCellFigure
+    ownSelOwner
   }) => {
     // rabbit is clicked, which can't go back
-    if (clickedCellFigure === null && ownSelFigure === 1) {
+    if (ownSelFigure === 1) {
       neighbours = neighbours.filter(neighbour => (
         !(neighbour[2] === 'top' && ownSelFigure === 1 && ownSelOwner === SILVER) &&
         !(neighbour[2] === 'bottom' && ownSelFigure === 1 && ownSelOwner === GOLD)
       ))
-    // enemy figure is clicked, so add its neighbour cells
-    } else if (typeof enemySelRow === 'number' && typeof enemySelCol === 'number') {
-      neighbours = neighbours.concat(getNeighbours({
-        rowIdx: enemySelRow,
-        colIdx: enemySelCol,
-        board
-      }))
     }
 
-    return neighbours.some(([[neighRow, neighCol], [neighFigure, neighOwner]]) => (
-      neighRow === rowIdx &&
-      neighCol === colIdx &&
-      (
-        neighFigure === null ||
-        (neighOwner === enemy && neighFigure < ownSelFigure && movesLeft > 1)
-      )
+    return neighbours.filter(([[neighRow, neighCol], [neighFigure, neighOwner]]) => (
+      neighFigure === null ||
+      (neighOwner === enemy && neighFigure < ownSelFigure && movesLeft > 1)
     ))
   }
 
@@ -129,47 +116,61 @@ const Game = () => {
       [[5, 5], board[5][5][1]]
     ]
 
-    traps.forEach(([[rowIdx, colIdx], trapOwner]) => {
-      if (trapOwner === undefined) {
-        return false
+    for (let i = 0; i < traps.length; i++) {
+      const [[rowIdx, colIdx], trapOwner] = traps[i]
+
+      if (typeof trapOwner !== 'string') {
+        continue
       }
 
-      const neighbourOwners = getNeighbours({ rowIdx, colIdx, board })
-        .map(neighbour => neighbour[1][1])
+      const isTrapProtected = getNeighbours({ rowIdx, colIdx, board })
+        .every(([_pos, [_fig, neighOwner]]) => neighOwner !== trapOwner)
 
-      if (neighbourOwners.every(neighOwner => neighOwner !== trapOwner)) {
+      if (isTrapProtected) {
         board[rowIdx][colIdx] = [null]
       }
-    })
+    }
+
+    const [figure] = board[rowIdx][colIdx]
 
     // remove selection if selected figure got removed from trap
-    if (board[rowIdx][colIdx][0] === null) {
+    if (figure === null) {
       setSelectedPositions([[], []])
     }
   }
-  
-  //TODO: check if has available turns
-  const getNextWinner = () => {
+
+  const getNextWinner = ({ board }) => {
+    // check if gold rabbit has reached the end
+    if (board[0].some(([figure, owner]) => figure === 1 && owner === GOLD)) {
+      return GOLD
+    }
+
+    // check if silver rabbit has reached the end
+    if (board[7].some(([figure, owner]) => figure === 1 && owner === SILVER)) {
+      return SILVER
+    }
+
     let [goldHasRabbits, silverHasRabbits] = [false, false]
+    let pieces = []
 
-    for (let i = 0; i < board.length; i++) {
-      if (goldHasRabbits && silverHasRabbits) {
-        break
-      }
+    // save every figure info
+    // check if every player has rabbits left
+    for (let rowIdx = 0; rowIdx < board.length; rowIdx++) {
+      for (let colIdx = 0; colIdx < board[rowIdx].length; colIdx++) {
+        const [figure, owner] = board[rowIdx][colIdx]
 
-      board[i].some(([figure, owner]) => {
+        if (figure !== null) {
+          pieces.push([[rowIdx, colIdx], [figure, owner]])
+        }
+
         if (figure === 1) {
           if (owner === GOLD) {
             goldHasRabbits = true
           } else {
             silverHasRabbits = true
           }
-
-          return true
         }
-
-        return false
-      })
+      }
     }
 
     if (!silverHasRabbits) {
@@ -177,6 +178,50 @@ const Game = () => {
     }
 
     if (!goldHasRabbits) {
+      return SILVER
+    }
+
+    // check if some player has no available moves
+    let [goldHasAvailableMoves, silverHasAvailableMoves] = [false, false]
+
+    pieces.some(([[rowIdx, colIdx], [figure, owner]]) => {
+      const ownNeighbours = getNeighbours({ rowIdx, colIdx, board })
+      const combinedNeighbours = ownNeighbours.reduce((acc, neighbour) => {
+        const [[neighRow, neighCol], [neighFigure, neighOwner]] = neighbour
+        let neighboursToAdd = [neighbour]
+
+        if (neighOwner !== owner && neighFigure < figure) {
+          neighboursToAdd = neighboursToAdd.concat(
+            getNeighbours({ rowIdx: neighRow, colIdx: neighCol, board })
+          )
+        }
+
+        return acc.concat(neighboursToAdd)
+      }, [])
+
+      const isFrozen = getIsFrozen({ neighbours: ownNeighbours, ownSelFigure: figure })
+      const validClicks = getValidClicks({
+        neighbours: combinedNeighbours,
+        ownSelFigure: figure,
+        ownSelOwner: owner
+      })
+
+      if (!isFrozen && validClicks.length > 0) {
+        if (owner === GOLD) {
+          goldHasAvailableMoves = true
+        } else {
+          silverHasAvailableMoves = true
+        }
+      }
+
+      return goldHasAvailableMoves && silverHasAvailableMoves
+    })
+
+    if (!silverHasAvailableMoves) {
+      return GOLD
+    }
+
+    if (!goldHasAvailableMoves) {
       return SILVER
     }
 
@@ -200,20 +245,6 @@ const Game = () => {
     if (selectedPositions[0].length === 2) {
       const nextHistory = history.map(turns => turns.map(move => Object.assign({}, move)))
       const nextBoard = board.map(row => [...row])
-
-      const [ownSelFigure, ownSelOwner] = board[ownSelRow][ownSelCol]
-      const ownSelNeighbours = getNeighbours({ rowIdx: ownSelRow, colIdx: ownSelCol, board })
-      const enemySelNeighbours = getNeighbours({ rowIdx: enemySelRow, colIdx: enemySelCol, board })
-
-      const isFrozen = getIsFrozen({ neighbours: ownSelNeighbours, ownSelFigure })
-      const isValidCellClick = getIsValidCellClick({
-        neighbours: ownSelNeighbours.concat(enemySelNeighbours),
-        rowIdx,
-        colIdx,
-        ownSelFigure,
-        ownSelOwner,
-        clickedCellFigure
-      })
 
       // rearranging figures in first 2 turns
       if (
@@ -243,18 +274,32 @@ const Game = () => {
         return
       }
 
+      const [ownSelFigure, ownSelOwner] = board[ownSelRow][ownSelCol]
+      const ownSelNeighbours = getNeighbours({ rowIdx: ownSelRow, colIdx: ownSelCol, board })
+      const enemySelNeighbours = getNeighbours({ rowIdx: enemySelRow, colIdx: enemySelCol, board })
+
+
+      const isFrozen = getIsFrozen({ neighbours: ownSelNeighbours, ownSelFigure })
+      const validClicks = getValidClicks({
+        // enemy figure may be clicked, so add its neighbour cells
+        neighbours: ownSelNeighbours.concat(enemySelNeighbours),
+        ownSelFigure,
+        ownSelOwner
+      })
+      const isValidClick = validClicks.some(([[neighRow, neighCol]]) =>
+        neighRow === rowIdx && neighCol === colIdx
+      )
+
       // checking if valid click
-      if (currentTurn > 1 && movesLeft > 0 && !isFrozen && isValidCellClick) {
+      if (currentTurn > 1 && movesLeft > 0 && !isFrozen && isValidClick) {
         // selecting on neighbour enemy figure
         if (clickedCellOwner === enemy) {
           setSelectedPositions([[ownSelRow, ownSelCol], [rowIdx, colIdx]])
           return
         }
 
-        const isPushOrPull = selectedPositions[1].length === 2
-
         // enemy figure is selected and trying to push or pull
-        if (isPushOrPull) {
+        if (selectedPositions[1].length === 2) {
           // pull
           if (ownSelNeighbours.some(
             ([[neighRow, neighCol]]) => neighRow === rowIdx && neighCol === colIdx)
@@ -283,25 +328,16 @@ const Game = () => {
         // remove figures on modified board
         removeFiguresInTraps({ board: nextBoard, rowIdx, colIdx })
 
-        // check if a rabbit has reached the end
-        let nextWinner = null
-
-        if (nextBoard[0].some(([figure, owner]) => figure === 1 && owner === GOLD)) {
-          nextWinner = GOLD
-        }
-
-        if (nextBoard[7].some(([figure, owner]) => figure === 1 && owner === SILVER)) {
-          nextWinner = SILVER
-        }
-
         // save move to history
         nextHistory[currentTurn] = nextHistory[currentTurn]
           .slice(0, currentMove + 1)
           .concat({
             playerOnTurn,
-            movesLeft: isPushOrPull ? movesLeft - 2 : movesLeft - 1,
-            winner: nextWinner,
-            board: nextBoard
+            winner,
+            board: nextBoard,
+            movesLeft: selectedPositions[1].length === 2 ?
+              movesLeft - 2 :
+              movesLeft - 1
           })
 
         setCurrentMove(currentMove + 1)
@@ -310,22 +346,61 @@ const Game = () => {
     }
   }
 
-  //TODO: prevent no move
-  //TODO: prevent zugzwag
+  const areBoardsEqual = ({ boardA, boardB }) => boardA.every((rowA, rowIdx) =>
+    rowA.every(([figureA, ownerA], cellIdx) => {
+      const [figureB, ownerB] = boardB[rowIdx][cellIdx]
+
+      return figureA === figureB && ownerA === ownerB
+    })
+  )
+
   const handleEndTurnClick = () => {
     const nextHistory = history.map(turns => turns.map(move => Object.assign({}, move)))
     const nextPlayerOnTurn = playerOnTurn === GOLD ? SILVER : GOLD
-    const nextWinner = getNextWinner()
+    const currentMoves = nextHistory[currentTurn]
+    const previousMoves = nextHistory[currentTurn - 2]
+    const hasTheBoardChanged = currentTurn > 1 ?
+      !areBoardsEqual({
+        boardA: currentMoves[0].board,
+        boardB: currentMoves[currentMoves.length - 1].board
+      }) :
+      true
+
+    if (!hasTheBoardChanged) {
+      alert('Please make a difference to the board! The turn you made is invalid!')
+
+      return
+    }
+
+    const hasZugzwangOccured = currentTurn > 3 ?
+      areBoardsEqual({
+        boardA: previousMoves[previousMoves.length - 1].board,
+        boardB: currentMoves[currentMoves.length - 1].board
+      }) :
+      false
+
+    if (hasZugzwangOccured) {
+      alert('Please make a different turn, than returning to the previous board state!')
+
+      return
+    }
 
     setCurrentTurn(currentTurn + 1)
     setCurrentMove(0)
     setSelectedPositions([[], []])
-    setHistory(nextHistory.slice(0, currentTurn + 1).concat([[{
-      playerOnTurn: nextPlayerOnTurn,
-      movesLeft: 4,
-      winner: nextWinner,
-      board
-    }]]))
+
+    // remove unwanted moves
+    nextHistory[currentTurn] = nextHistory[currentTurn]
+      .slice(0, currentMove + 1)
+
+    setHistory(nextHistory.slice(0, currentTurn + 1)
+      .concat([[{
+        playerOnTurn: nextPlayerOnTurn,
+        movesLeft: 4,
+        winner: getNextWinner({ board }),
+        board
+      }]])
+    )
   }
 
   const toggleHistory = () => {
@@ -354,25 +429,13 @@ const Game = () => {
 
   const BoardInfo = () => (
     <div className='board-info'>
-      <div className='status'>
-        {
-          currentTurn < 2 ?
-            `Rearrange figures for ${playerOnTurn}` :
-            typeof winner === 'string' ?
-              `Winner is ${winner.toUpperCase()}!` :
-              `Moves left for ${playerOnTurn}: ${movesLeft}`
-        }
-      </div>
-      <button
-        className='end-turn'
-        onClick={handleEndTurnClick}
-        disabled={
-          (currentTurn > 1 && movesLeft === 4) ||
-          typeof winner === 'string'
-        }
-      >
-        End Turn
-      </button>
+      {
+        currentTurn < 2 ?
+          `Rearrange figures for ${playerOnTurn}` :
+          typeof winner === 'string' ?
+            `Winner is ${winner.toUpperCase()}!` :
+            `Moves left for ${playerOnTurn}: ${movesLeft}`
+      }
     </div>
   )
 
@@ -424,11 +487,32 @@ const Game = () => {
     </div>
   )
 
+  const Options = () => (
+    <div className='options'>
+      <button
+        className='options-button'
+        onClick={handleEndTurnClick}
+        disabled={
+          (currentTurn > 1 && movesLeft === 4) ||
+            typeof winner === 'string'
+        }
+      >
+        End Turn
+      </button>
+      <button className='options-button' onClick={toggleHistory}>
+        { isHistoryEnabled ? 'Hide history' : 'Show history' }
+      </button>
+      <button className='options-button' onClick={startNewGame}>
+        New Game
+      </button>
+    </div>
+  )
+
   const HistoryOfMoves = () => (
-    <div className="current-moves">
+    <div className="history-moves">
       <h3>Change to a move</h3>
       {history[currentTurn].map((_, wantedMove) => (
-        <button 
+        <button
           key={wantedMove} 
           onClick={changeToMove(wantedMove)}
         >
@@ -438,15 +522,14 @@ const Game = () => {
     </div>
   )
 
-  const Options = () => (
-    <div className='options'>
-      <button className='toggle-history' onClick={toggleHistory}>
-        { isHistoryEnabled ? 'Hide history' : 'Show history' }
-      </button>
-      <button className='new-game' onClick={startNewGame}>New Game</button>
-      { 
+
+  const HistoryOfTurns = () => (
+    <>
+      {
         !isHistoryEnabled ?
-          null :
+        null :
+        <div className="history-turns">
+          <h3>Change to a turn</h3>
           <ul>
             {history.map((turn, wantedTurn) => {
               const nameOfPlayer = turn[0]['playerOnTurn']
@@ -461,8 +544,9 @@ const Game = () => {
               )
             })}
           </ul>
+        </div>
       }
-    </div>
+    </>
   )
 
   return (
@@ -472,12 +556,13 @@ const Game = () => {
         <Board />
       </div>
       <div className="game-info">
+        <Options />
         {
           currentTurn < 2 ?
             null :
             <HistoryOfMoves />
         }
-        <Options />
+        <HistoryOfTurns />
       </div>
     </div>
   )

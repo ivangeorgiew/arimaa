@@ -4,7 +4,7 @@ body {
 }
 
 ol, ul {
-  padding-left: 30px;
+  padding-left: 15px;
 }
 
 li {
@@ -20,19 +20,13 @@ li {
 .board-info {
   display: flex;
   justify-content: center;
-  /*align-items: center;*/
-  /*width: 750px;*/
+  margin-bottom: 30px;
+  font-size: 35px;
 }
 
-.status {
-  margin-bottom: 10px;
-  font-size: 30px;
-  margin-right: 20px;
-  display: inline;
-}
-
-.end-turn {
-  font-size: 30px;
+.options-button {
+  font-size: 20px;
+  margin-right: 10px;
   margin-bottom: 10px;
 }
 
@@ -65,37 +59,37 @@ li {
 }
 
 .game {
-	width: 1200px;
-	margin: 0 auto;
+  margin-top: 30px;
+  margin-left: 30px;
   display: flex;
   flex-direction: row;
 }
 
 .game-info {
-  margin-left: 20px;
+  margin-left: 50px;
 }
 
 .silver {
-	color: silver;
+  color: silver;
 }
 
 .gold {
-	color: gold;
+  color: gold;
 }
 
 .trap {
-	background-image: url("./img/trap.png");
-	background-size: 80px;
+  background-image: url("./img/trap.png");
+  background-size: 80px;
 }
 
 .own-selected {
-	border: 3px solid white;
+  border: 3px solid white;
 }
 
 .enemy-selected {
-	border: 3px dotted white;
+  border: 3px dotted white;
 }
 
-.toggle-history {
-	margin-top: 20px;
+.history-turns {
+  margin-top: 30px;
 }

@@ -50,6 +50,11 @@ li {
   width: 84px;
 }
 
+.cell img {
+  width: 80px;
+  height: 80px;
+}
+
 .cell:focus {
   outline: none;
 }

@@ -1,5 +1,5 @@
 # Link to the working application
-http://iliyanmarkov.github.io/arimaa/
+http://ivangeorgiew.github.io/arimaa/
 
 # Getting Started with Create React App
 
